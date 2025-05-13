@@ -183,7 +183,7 @@ def main():
                         'SMA_200': '{:.2f}',
                         'EMA_50': '{:.2f}',
                         'Hurst': '{:.4f}'
-                    })
+                    }))
                     
             except Exception as e:
                 st.error(f"Erro durante a análise: {str(e)}")
