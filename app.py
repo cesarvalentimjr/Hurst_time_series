@@ -113,7 +113,7 @@ def main():
     
     # Parâmetros na sidebar
     st.sidebar.header("Configurações")
-    ticker = st.sidebar.text_input("Ticker (ex: btc-usd - moedas e criptos, ^BVSP - índices, PETR4.SA - ações e ETFs da B3)", "btc-usd")
+    ticker = st.sidebar.text_input("Ticker (ex: btc-usd - moedas e criptos; ^BVSP - índices; PETR4.SA - ações e ETFs da B3)", "btc-usd")
     start_date = st.sidebar.text_input("Data Inicial (YYYY-MM-DD)", "2023-01-01")
     end_date = st.sidebar.text_input("Data Final (YYYY-MM-DD)", pd.to_datetime("today").strftime("%Y-%m-%d"))
     window_size = st.sidebar.slider("Janela do Hurst", 30, 200, 100, 10)
