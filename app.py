@@ -167,16 +167,18 @@ def main():
                     regime = "Tendência" if hurst_series.iloc[-1] > 0.5 else "Reversão"
                     st.metric("Regime Atual", regime)
                 
-                # Dados tabulares
+                # Dados tabulares - CORREÇÃO APLICADA AQUI
                 if st.checkbox("Mostrar dados completos"):
                     display_data = data.copy()
                     display_data['Hurst'] = hurst_series
-                    st.dataframe(display_data.tail(100).style.format({
-                        'Close': '{:.2f}',
-                        'SMA_200': '{:.2f}',
-                        'EMA_50': '{:.2f}',
-                        'Hurst': '{:.4f}'
-                    })
+                    st.dataframe(
+                        display_data.tail(100).style.format({
+                            'Close': '{:.2f}',
+                            'SMA_200': '{:.2f}',
+                            'EMA_50': '{:.2f}',
+                            'Hurst': '{:.4f}'
+                        }
+                    )
                     
             except Exception as e:
                 st.error(f"Erro durante a análise: {str(e)}")
