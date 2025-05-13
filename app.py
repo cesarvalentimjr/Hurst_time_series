@@ -10,7 +10,6 @@ from PIL import Image
 # Configuração inicial da página
 st.set_page_config(layout="wide", page_title="Análise de Hurst")
 
-# Função para carregar e exibir logo
 def load_logo():
     try:
         logo = Image.open("Hurst_time_series.png")
@@ -23,16 +22,7 @@ def load_logo():
         st.title("Análise de Regressão à Média ou Continuidade")
         st.warning("Arquivo da logo não encontrado. Coloque 'Hurst_time_series.png' na mesma pasta do script.")
 
-# Função robusta para cálculo do índice de Hurst
 def calculate_hurst_series(price_series, window_size):
-    """
-    Calcula o índice de Hurst com janela deslizante
-    Args:
-        price_series: pd.Series com os preços
-        window_size: tamanho da janela de cálculo
-    Returns:
-        pd.Series com os valores de Hurst alinhados com os preços
-    """
     if not isinstance(price_series, pd.Series):
         price_series = pd.Series(price_series)
     
@@ -53,15 +43,11 @@ def calculate_hurst_series(price_series, window_size):
         except Exception:
             continue
     
-    # Cria série alinhada com os preços originais
     hurst_series = pd.Series(index=price_series.index, dtype=float)
     hurst_series.loc[valid_indices] = hurst_values
-    
     return hurst_series.dropna()
 
-# Função para plotar os gráficos
 def plot_analysis(data, hurst_series, ticker, window_size):
-    """Gera os gráficos de análise com formatação profissional"""
     fig, axes = plt.subplots(2, 1, figsize=(16, 12), gridspec_kw={'hspace': 0.3})
     
     # Gráfico de preços
@@ -69,17 +55,14 @@ def plot_analysis(data, hurst_series, ticker, window_size):
     axes[0].plot(data.index, data['SMA_200'], label="SMA 200", color='orange', linestyle='--', linewidth=1.5)
     axes[0].plot(data.index, data['EMA_50'], label="EMA 50", color='purple', linestyle='--', linewidth=1.5)
     
-    # Áreas de regime
     ymin, ymax = data['Close'].min(), data['Close'].max()
     axes[0].fill_between(
-        hurst_series.index,
-        ymin, ymax,
+        hurst_series.index, ymin, ymax,
         where=(hurst_series > 0.5),
         color='green', alpha=0.2, label="Tendência (H>0.5)"
     )
     axes[0].fill_between(
-        hurst_series.index,
-        ymin, ymax,
+        hurst_series.index, ymin, ymax,
         where=(hurst_series <= 0.5),
         color='red', alpha=0.2, label="Reversão (H≤0.5)"
     )
@@ -110,7 +93,6 @@ def plot_analysis(data, hurst_series, ticker, window_size):
     axes[1].legend(loc='upper left', fontsize=10)
     axes[1].grid(True, alpha=0.3)
     
-    # Formatação dos eixos de data
     for ax in axes:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(data)//10)))
@@ -118,11 +100,9 @@ def plot_analysis(data, hurst_series, ticker, window_size):
     
     return fig
 
-# Função principal
 def main():
     load_logo()
     
-    # Parâmetros na sidebar
     st.sidebar.header("Configurações")
     ticker = st.sidebar.text_input("Ticker (ex: btc-usd, ^BVSP)", "btc-usd")
     start_date = st.sidebar.text_input("Data Inicial (YYYY-MM-DD)", "2023-01-01")
@@ -132,25 +112,21 @@ def main():
     if st.sidebar.button("Analisar"):
         with st.spinner("Carregando e processando dados..."):
             try:
-                # Download dos dados
                 data = yf.download(ticker, start=start_date, end=end_date, progress=False)
                 
                 if data.empty:
                     st.error("Nenhum dado encontrado. Verifique o ticker e as datas.")
                     return
                 
-                # Pré-processamento
                 data = data[['Close']].copy()
                 data['SMA_200'] = data['Close'].rolling(window=200, min_periods=1).mean()
                 data['EMA_50'] = data['Close'].ewm(span=50, adjust=False, min_periods=1).mean()
                 
-                # Cálculo do Hurst
                 hurst_series = calculate_hurst_series(data['Close'], window_size)
                 
                 if hurst_series.empty:
                     st.warning(f"Não foi possível calcular o Hurst com janela de {window_size} períodos. Tente uma janela menor.")
                     
-                    # Mostra apenas o gráfico de preços
                     fig, ax = plt.subplots(figsize=(16, 6))
                     ax.plot(data.index, data['Close'], label="Preço", color='blue', linewidth=1.5)
                     ax.plot(data.index, data['SMA_200'], label="SMA 200", color='orange', linestyle='--', linewidth=1.5)
@@ -161,15 +137,12 @@ def main():
                     plt.close(fig)
                     return
                 
-                # Filtra os dados para o período com Hurst calculado
                 data = data.loc[hurst_series.index]
                 
-                # Plotagem dos gráficos
                 fig = plot_analysis(data, hurst_series, ticker, window_size)
                 st.pyplot(fig)
                 plt.close(fig)
                 
-                # Estatísticas
                 st.subheader("Estatísticas Atuais")
                 col1, col2 = st.columns(2)
                 with col1:
@@ -178,7 +151,6 @@ def main():
                     regime = "Tendência" if hurst_series.iloc[-1] > 0.5 else "Reversão"
                     st.metric("Regime Atual", regime)
                 
-                # Dados tabulares
                 if st.checkbox("Mostrar dados completos"):
                     display_data = data.copy()
                     display_data['Hurst'] = hurst_series
@@ -187,7 +159,7 @@ def main():
                         'SMA_200': '{:.2f}',
                         'EMA_50': '{:.2f}',
                         'Hurst': '{:.4f}'
-                    })
+                    }))
                     
             except Exception as e:
                 st.error(f"Erro durante a análise: {str(e)}")
