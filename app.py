@@ -106,10 +106,10 @@ def plot_combined_charts(data, hurst_series, ticker, window_size):
     axes[1].legend(loc='upper left', fontsize=10)
     axes[1].grid(True, alpha=0.3)
     
-    # Formatação comum dos eixos de data
+    # Formatação comum dos eixos de data (LINHA 112 CORRIGIDA)
     for ax in axes:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(data)//10))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(data)//10)))
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
     
     return fig
