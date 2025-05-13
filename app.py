@@ -106,7 +106,7 @@ def plot_combined_charts(data, hurst_series, ticker, window_size):
     axes[1].legend(loc='upper left', fontsize=10)
     axes[1].grid(True, alpha=0.3)
     
-    # Formatação comum dos eixos de data (LINHA 112 CORRIGIDA)
+    # Formatação comum dos eixos de data
     for ax in axes:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(data)//10)))
@@ -146,8 +146,8 @@ def main():
                 
                 # Cálculo das médias móveis
                 data = data[['Close']].copy()
-                data['SMA_200'] = data['Close'].rolling(window=200).mean()
-                data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
+                data['SMA_200'] = data['Close'].rolling(window=200, min_periods=1).mean()
+                data['EMA_50'] = data['Close'].ewm(span=50, adjust=False, min_periods=1).mean()
                 
                 # Cálculo do Hurst
                 hurst_series = calculate_hurst_series(data['Close'], window_size)
@@ -156,23 +156,35 @@ def main():
                     st.warning("Não foi possível calcular o Hurst. Tente uma janela menor.")
                     return
                 
-                # Alinhamento dos índices
+                # Alinhamento seguro dos índices
                 common_index = data.index.intersection(hurst_series.index)
+                if len(common_index) == 0:
+                    st.error("Não há dados coincidentes após cálculo do Hurst.")
+                    return
+                
                 data = data.loc[common_index]
                 hurst_series = hurst_series.loc[common_index]
+                
+                # Verificação final antes de plotar
+                if len(data) == 0 or len(hurst_series) == 0:
+                    st.error("Dados insuficientes para plotagem.")
+                    return
                 
                 # Plotagem dos gráficos
                 fig = plot_combined_charts(data, hurst_series, ticker, window_size)
                 st.pyplot(fig)
                 plt.close(fig)
                 
-                # Estatísticas
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Último Valor do Hurst", f"{hurst_series.iloc[-1]:.4f}")
-                with col2:
-                    regime = "Tendência" if hurst_series.iloc[-1] > 0.5 else "Reversão"
-                    st.metric("Regime Atual", regime)
+                # Estatísticas (com verificação de índice)
+                if len(hurst_series) > 0:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Último Valor do Hurst", f"{hurst_series.iloc[-1]:.4f}")
+                    with col2:
+                        regime = "Tendência" if hurst_series.iloc[-1] > 0.5 else "Reversão"
+                        st.metric("Regime Atual", regime)
+                else:
+                    st.warning("Não há dados suficientes para mostrar métricas.")
                 
                 # Dados tabulares
                 if st.checkbox("Mostrar dados completos"):
