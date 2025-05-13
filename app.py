@@ -5,162 +5,145 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 from hurst import compute_Hc
-from PIL import Image # Para a logo
+from PIL import Image
 
-# Função para calcular o índice de Hurst com uma janela deslizante
-def calculate_hurst_series_func(series_data, window_size_hurst):
-    hurst_values = []
-    # Garante que series_data seja uma Series e remove NaNs
-    series_data_clean = pd.Series(series_data).dropna()
+# Função robusta para calcular o índice de Hurst
+def calculate_hurst_series(price_series, window_size):
+    """
+    Calcula o índice de Hurst com janela deslizante
+    Args:
+        price_series: pd.Series com os preços
+        window_size: tamanho da janela de cálculo
+    Returns:
+        pd.Series com os valores de Hurst
+    """
+    if not isinstance(price_series, pd.Series):
+        try:
+            price_series = pd.Series(price_series)
+        except Exception as e:
+            st.error(f"Erro ao converter dados para Series: {e}")
+            return pd.Series(dtype=float)
     
-    # Verifica se há dados suficientes após a limpeza
-    if len(series_data_clean) < window_size_hurst or len(series_data_clean) < 2:
-        return pd.Series(dtype=float) # Retorna uma série vazia se não houver dados suficientes
-
-    for i in range(window_size_hurst, len(series_data_clean)):
-        window_data = series_data_clean[i-window_size_hurst:i]
-        # compute_Hc precisa de pelo menos 2 pontos e a janela deve ter o tamanho esperado
-        if len(window_data) < 2 or len(window_data) < window_size_hurst:
-            hurst_values.append(np.nan)
-            continue
+    clean_series = price_series.dropna()
+    
+    if len(clean_series) < window_size or len(clean_series) < 2:
+        return pd.Series(dtype=float)
+    
+    hurst_values = []
+    valid_indices = []
+    
+    for i in range(window_size, len(clean_series)):
+        window_data = clean_series.iloc[i-window_size:i]
         try:
             H, _, _ = compute_Hc(window_data, kind='random_walk', simplified=True)
             hurst_values.append(H)
-        except Exception: # Captura exceções mais genéricas do compute_Hc
-            hurst_values.append(np.nan)
-            
-    if hurst_values:
-        # Garante que o índice corresponda aos dados limpos e fatiados
-        return pd.Series(hurst_values, index=series_data_clean.index[window_size_hurst:])
-    else:
-        return pd.Series(dtype=float)
+            valid_indices.append(clean_series.index[i])
+        except Exception as e:
+            continue
+    
+    return pd.Series(hurst_values, index=valid_indices)
 
-# Função principal da aplicação
+# Configuração principal da aplicação
 def main():
-    st.set_page_config(layout="wide")
-
-    # Título e Logo
+    st.set_page_config(layout="wide", page_title="Análise de Hurst")
+    
+    # Cabeçalho com logo
     try:
-        logo = Image.open("Hurst_time_series.png") 
-        col1, col2 = st.columns([1, 6]) 
+        logo = Image.open("Hurst_time_series.png")
+        col1, col2 = st.columns([1, 6])
         with col1:
-            st.image(logo, width=100) 
+            st.image(logo, width=100)
         with col2:
-            st.title("Análise de regressão à média ou continuidade")
+            st.title("Análise de Regressão à Média ou Continuidade")
     except FileNotFoundError:
-        st.title("Análise de regressão à média ou continuidade")
-        st.warning("Arquivo da logo 'Hurst_time_series.png' não encontrado. Coloque o arquivo na mesma pasta do app.py.")
+        st.title("Análise de Regressão à Média ou Continuidade")
+        st.warning("Logo não encontrada. O arquivo 'Hurst_time_series.png' deve estar na mesma pasta.")
 
     # Parâmetros de entrada
-    ticker_default = "btc-usd"
-    start_date_default = "2023-01-01"
-    end_date_default = pd.to_datetime("today").strftime("%Y-%m-%d")
-    window_size_default = 100
-
-    st.sidebar.header("Parâmetros de Análise")
-    ticker = st.sidebar.text_input("Ticker (ex: btc-usd, ^BVSP)", ticker_default)
-    start_date = st.sidebar.text_input("Data de Início (YYYY-MM-DD)", start_date_default)
-    end_date = st.sidebar.text_input("Data Final (YYYY-MM-DD)", end_date_default)
-    window_size = st.sidebar.number_input("Janela do Hurst (períodos)", min_value=10, max_value=500, value=window_size_default, step=1)
-
+    st.sidebar.header("Configurações")
+    ticker = st.sidebar.text_input("Ativo (ex: btc-usd, ^BVSP)", "btc-usd")
+    start_date = st.sidebar.text_input("Data Inicial (YYYY-MM-DD)", "2023-01-01")
+    end_date = st.sidebar.text_input("Data Final (YYYY-MM-DD)", pd.to_datetime("today").strftime("%Y-%m-%d"))
+    window_size = st.sidebar.slider("Janela do Hurst", 10, 500, 100, 10)
+    
     if st.sidebar.button("Analisar"):
-        data_load_state = st.text(f"Carregando dados para {ticker}...")
-        try:
-            data = yf.download(ticker, start=start_date, end=end_date, progress=False)
-            if data.empty:
-                st.error(f"Nenhum dado encontrado para o ticker {ticker} no período de {start_date} a {end_date}.")
-                data_load_state.text("")
-                return
-            data_load_state.text(f"Dados para {ticker} carregados com sucesso!")
-        except Exception as e:
-            st.error(f"Erro ao baixar os dados para {ticker}: {e}")
-            data_load_state.text("")
-            return
+        with st.spinner("Carregando dados..."):
+            try:
+                data = yf.download(ticker, start=start_date, end=end_date, progress=False)
+                
+                if data.empty:
+                    st.error("Nenhum dado encontrado. Verifique o ticker e as datas.")
+                    return
+                
+                # Pré-processamento
+                data_viz = data[['Close']].copy()
+                data_viz['SMA_200'] = data_viz['Close'].rolling(200).mean()
+                data_viz['EMA_50'] = data_viz['Close'].ewm(span=50, adjust=False).mean()
+                
+                # Cálculo do Hurst
+                hurst_series = calculate_hurst_series(data_viz['Close'], window_size)
+                
+                if hurst_series.empty:
+                    st.warning("Não foi possível calcular o Hurst. Reduza o tamanho da janela.")
+                    return
+                
+                # Visualização
+                st.success("Análise concluída!")
+                plot_results(data_viz, hurst_series, ticker, window_size)
+                
+                # Dados tabulares
+                if st.checkbox("Mostrar dados completos"):
+                    display_data = data_viz.join(hurst_series.rename('Hurst'))
+                    st.dataframe(display_data.tail(100).style.format({
+                        'Close': '{:.2f}',
+                        'SMA_200': '{:.2f}',
+                        'EMA_50': '{:.2f}',
+                        'Hurst': '{:.4f}'
+                    }))
+                    
+            except Exception as e:
+                st.error(f"Erro durante a análise: {str(e)}")
 
-        data_viz = data[['Close']].copy()
-        data_viz['SMA_200'] = data_viz['Close'].rolling(window=200, min_periods=1).mean()
-        data_viz['EMA_50'] = data_viz['Close'].ewm(span=50, adjust=False, min_periods=1).mean()
-
-        # Calcular o índice de Hurst (Linha 54 no código original do usuário)
-        hurst_series = calculate_hurst_series_func(data_viz['Close'], window_size)
-
-        if hurst_series.empty or hurst_series.isna().all():
-            st.warning(f"Não foi possível calcular o índice de Hurst para {ticker} com janela de {window_size} períodos. Verifique os dados ou o tamanho da janela.")
-            fig, ax = plt.subplots(figsize=(16, 5))
-            ax.plot(data_viz.index, data_viz['Close'], label="Preço de Fechamento", color='blue', linewidth=1.5)
-            ax.plot(data_viz.index, data_viz['SMA_200'], label="SMA 200 Períodos", color='orange', linestyle='--', linewidth=1.5)
-            ax.plot(data_viz.index, data_viz['EMA_50'], label="EMA 50 Períodos", color='purple', linestyle='--', linewidth=1.5)
-            ax.set_title(f"Preço de Fechamento, SMA 200 e EMA 50 para {ticker}", fontsize=14)
-            ax.set_xlabel("Data", fontsize=12)
-            ax.set_ylabel("Preço", fontsize=12)
-            ax.legend(fontsize=10)
-            ax.grid(True, alpha=0.3)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-            ax.xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(data_viz.index)//10)))
-            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-            st.pyplot(fig)
-            plt.close(fig)
-            return
-
-        common_index = data_viz.index.intersection(hurst_series.index)
-        if common_index.empty:
-            st.error("Erro ao alinhar os dados de preço e Hurst. Não há datas em comum.")
-            return
-            
-        data_viz_aligned = data_viz.loc[common_index]
-        hurst_series_final = hurst_series.loc[common_index]
-
-        if data_viz_aligned.empty or hurst_series_final.empty:
-            st.error("Após o alinhamento, as séries de dados de preço ou Hurst estão vazias.")
-            return
-
-        st.subheader("Gráficos de Análise")
-        fig, axes = plt.subplots(2, 1, figsize=(16, 12), gridspec_kw={'hspace': 0.45})
-
-        axes[0].plot(data_viz_aligned.index, data_viz_aligned['Close'], label="Preço", color='blue', linewidth=1.5)
-        axes[0].plot(data_viz_aligned.index, data_viz_aligned['SMA_200'], label="SMA 200", color='orange', linestyle='--', linewidth=1.5)
-        axes[0].plot(data_viz_aligned.index, data_viz_aligned['EMA_50'], label="EMA 50", color='purple', linestyle='--', linewidth=1.5)
-
-        min_price_plot = data_viz_aligned['Close'].min()
-        max_price_plot = data_viz_aligned['Close'].max()
-
-        axes[0].fill_between(hurst_series_final.index, min_price_plot, max_price_plot, where=(hurst_series_final > 0.5), color='green', alpha=0.2, label="Regime de Tendência (H > 0.5)")
-        axes[0].fill_between(hurst_series_final.index, min_price_plot, max_price_plot, where=(hurst_series_final <= 0.5), color='red', alpha=0.2, label="Regime de Reversão à Média (H <= 0.5)")
-
-        axes[0].set_title(f"Preço ({ticker}), Médias Móveis e Regimes de Hurst", fontsize=14)
-        axes[0].set_xlabel("Data", fontsize=12)
-        axes[0].set_ylabel("Preço", fontsize=12)
-        axes[0].legend(fontsize=10)
-        axes[0].grid(True, alpha=0.3)
-        axes[0].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-        axes[0].xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(data_viz_aligned.index)//10)))
-        plt.setp(axes[0].xaxis.get_majorticklabels(), rotation=45, ha='right')
-
-        axes[1].plot(hurst_series_final.index, hurst_series_final, label="Índice de Hurst", color='saddlebrown', linewidth=1.5)
-        axes[1].axhline(0.5, color='black', linestyle='--', linewidth=1.2, label="Limite H = 0.5")
-
-        axes[1].fill_between(hurst_series_final.index, 0, hurst_series_final, where=(hurst_series_final > 0.5), color='green', alpha=0.2)
-        axes[1].fill_between(hurst_series_final.index, 0, hurst_series_final, where=(hurst_series_final <= 0.5), color='red', alpha=0.2)
-        
-        axes[1].set_title(f"Índice de Hurst ({ticker} - Janela de {window_size} Períodos)", fontsize=14)
-        axes[1].set_xlabel("Data", fontsize=12)
-        axes[1].set_ylabel("Índice de Hurst", fontsize=12)
-        axes[1].legend(fontsize=10)
-        axes[1].grid(True, alpha=0.3)
-        axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-        axes[1].xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(hurst_series_final.index)//10)))
-        plt.setp(axes[1].xaxis.get_majorticklabels(), rotation=45, ha='right')
-        
-        plt.tight_layout(pad=2.0)
-        st.pyplot(fig)
-        plt.close(fig)
-
-        if st.checkbox("Mostrar dados tabulares (preço, médias, Hurst)"):
-            display_data = data_viz_aligned.copy()
-            display_data['Hurst'] = hurst_series_final
-            st.dataframe(display_data.tail(100))
-    else:
-        st.info("Ajuste os parâmetros na barra lateral e clique em 'Analisar' para gerar os gráficos.")
+def plot_results(data, hurst, ticker, window_size):
+    """Gera os gráficos de análise"""
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 12), gridspec_kw={'hspace': 0.3})
+    
+    # Gráfico de preços
+    ax1.plot(data.index, data['Close'], label='Preço', color='blue', lw=1.5)
+    ax1.plot(data.index, data['SMA_200'], label='SMA 200', color='orange', ls='--', lw=1.5)
+    ax1.plot(data.index, data['EMA_50'], label='EMA 50', color='purple', ls='--', lw=1.5)
+    
+    # Áreas de regime
+    ymin, ymax = data['Close'].min(), data['Close'].max()
+    ax1.fill_between(hurst.index, ymin, ymax, where=(hurst > 0.5), 
+                    color='green', alpha=0.1, label='Tendência (H>0.5)')
+    ax1.fill_between(hurst.index, ymin, ymax, where=(hurst <= 0.5), 
+                    color='red', alpha=0.1, label='Reversão (H≤0.5)')
+    
+    ax1.set_title(f"Preço e Médias Móveis - {ticker}", fontsize=14)
+    ax1.legend(loc='upper left')
+    ax1.grid(alpha=0.3)
+    
+    # Gráfico do Hurst
+    ax2.plot(hurst.index, hurst, label='Índice de Hurst', color='saddlebrown', lw=1.5)
+    ax2.axhline(0.5, color='black', ls='--', lw=1, label='Limite H=0.5')
+    
+    ax2.fill_between(hurst.index, 0.5, hurst, where=(hurst>0.5), color='green', alpha=0.1)
+    ax2.fill_between(hurst.index, 0.5, hurst, where=(hurst<=0.5), color='red', alpha=0.1)
+    
+    ax2.set_title(f"Índice de Hurst (Janela={window_size})", fontsize=14)
+    ax2.set_ylim(0, 1)
+    ax2.legend(loc='upper left')
+    ax2.grid(alpha=0.3)
+    
+    # Formatação comum
+    for ax in [ax1, ax2]:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, len(data)//10)))
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    st.pyplot(fig)
+    plt.close()
 
 if __name__ == '__main__':
     main()
