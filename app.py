@@ -67,6 +67,11 @@ def plot_analysis(data, hurst_series, ticker, window_size):
     axes[0].plot(data.index, data['EMA_50'], label="EMA 50", color='purple', linestyle='--', linewidth=1.5)
     ymin, ymax = data['Close'].min(), data['Close'].max()
 
+    axes[0].set_title(f"Preço e Médias Móveis - {ticker}", fontsize=14)
+    axes[0].set_ylabel("Preço", fontsize=12)
+    axes[0].legend(loc='upper left', fontsize=10)
+    axes[0].grid(True, alpha=0.3)
+
     colors = {
         "Forte Reversão": ('darkred', 0.0, 0.3),
         "Reversão": ('red', 0.3, 0.4),
@@ -76,19 +81,13 @@ def plot_analysis(data, hurst_series, ticker, window_size):
         "Forte Tendência": ('darkgreen', 0.7, 1.0)
     }
 
-    for label, (color, low, high) in colors.items():
-        mask = hurst_series.between(low, high)
-        axes[0].fill_between(hurst_series.index, ymin, ymax, where=mask, color=color, alpha=0.2, label=label)
-
-    axes[0].set_title(f"Preço e Médias Móveis - {ticker}", fontsize=14)
-    axes[0].set_ylabel("Preço", fontsize=12)
-    axes[0].legend(loc='upper left', fontsize=10)
-    axes[0].grid(True, alpha=0.3)
-
     axes[1].plot(hurst_series.index, hurst_series, label="Índice de Hurst", color='saddlebrown', linewidth=1.5)
+
     for label, (color, low, high) in colors.items():
         mask = hurst_series.between(low, high)
-        axes[1].fill_between(hurst_series.index, low, high, where=mask, color=color, alpha=0.2, label=label)
+        selected = hurst_series[mask]
+        axes[1].fill_between(selected.index, 0.5, selected, where=selected > 0.5, color=color, alpha=0.2, label=label if high > 0.5 else None)
+        axes[1].fill_between(selected.index, selected, 0.5, where=selected < 0.5, color=color, alpha=0.2, label=label if high <= 0.5 else None)
 
     axes[1].axhline(0.5, color='black', linestyle='--', linewidth=1.2, label="H=0.5")
     axes[1].set_title(f"Índice de Hurst (Janela={window_size} períodos)", fontsize=14)
